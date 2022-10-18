@@ -1,0 +1,473 @@
+---
+title: "DABI_25_MA7419_CW2"
+output: ioslides_presentation
+---
+
+## Road trafic accidents resulting in a casualty
+  - Question 1: Analyze accidents severity in UK for the last 5 years
+  - Visualization: Slides 4 - 10
+  - Question 2: Compare accident deaths for UK and European Union in the last decade
+  - Visualization: Slides 11 - 13
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+
+library(tidyverse)
+library(dplyr)
+library(latexpdf)
+library(knitr)
+library(readxl)
+library(ggplot2)
+library(janitor)
+library(RgoogleMaps)
+library(stats19)
+library(wordcloud2)
+library(rworldmap)
+library(ranger)
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+
+casualty_data <- read_csv("/home/dd231/R/MA7419/FDS/casualty_five_years.csv")
+accident_data <-read_csv("/home/dd231/R/MA7419/FDS/accident_five_years.csv")
+```
+
+```{r}
+
+# Total Casualties in UK 2016-2021
+
+casualty_total_year_wise<-accident_data  %>%
+  group_by(accident_year) %>%
+  summarise(number_of_casualties = sum(number_of_casualties))
+
+# Total Accidents in UK 2016-2021
+
+accident_total_year_wise<-accident_data  %>%
+  group_by(accident_year) %>%
+  summarise(n=n())
+names(accident_total_year_wise)[names(accident_total_year_wise) == "n"] <- "number_of_accidents"
+```
+
+## Contents of the presentation
+- Accidents & Casualities in UK between 2016 - 2020
+- Categories of Accident Severity
+- Accident Serverity in different Districts
+- Geospatial mapping on Brent(sample): Based on accident severity
+- Accident severity based on age band
+- Listing the importance variables of accident severity (Random Forest)
+- Listing the importance variables of Casualty severity (Random Forest)
+- Comparing total accident deaths:UK Vs European Countries
+- EU Countries with more than 60% Accident Deaths per million inhabitants in 2010 & 2020
+
+
+## Accidents & Casualties in UK between 2016 - 2020
+```{r, warning=FALSE, message=FALSE}
+
+#Joining accidents & casualties data
+
+year<-accident_total_year_wise$accident_year
+casualty<-casualty_total_year_wise$number_of_casualties
+accident<-accident_total_year_wise$number_of_accidents
+accident_and_casualty_total<-full_join(casualty_total_year_wise, accident_total_year_wise)
+
+#plotting accidents and casualties for the last five years
+
+ggplot()+
+  geom_line(data=accident_and_casualty_total,aes(y=accident,x= year,colour="Accidents"),size=1 )+
+  geom_line(data=accident_and_casualty_total,aes(y=casualty,x= year,colour="Casualties"),size=1) +
+  scale_color_manual(name = "Accidents & Casualities", values = c("Accidents" = "blue", "Casualties" = "red"))+labs(title="
+            Casualties and Accidents in UK 2016-2020",
+x ="Year", y = "Total Frequency")+ theme(
+  panel.background = element_rect(fill = "lightblue",
+                                colour = "lightblue",
+                                size = 0.5, linetype = "solid"),
+  panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                colour = "white"),
+  panel.grid.minor = element_line(size = 0.25, linetype = 'solid',
+                                colour = "white"))
+
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+
+#Description of the casualty severity
+
+casualty_severity_total_year_wise<-tabyl(casualty_data, accident_year, casualty_severity)
+names(casualty_severity_total_year_wise)[names(casualty_severity_total_year_wise) == "1"] <- "fatality"
+names(casualty_severity_total_year_wise)[names(casualty_severity_total_year_wise) == "2"] <- "serious_injury"
+names(casualty_severity_total_year_wise)[names(casualty_severity_total_year_wise) == "3"] <- "slight_injury"
+```
+
+
+## Categories of Accident Severity
+```{r, warning=FALSE, message=FALSE}
+
+# Types of Accident severity
+
+accident_year<-casualty_severity_total_year_wise$accident_year
+fatality<-casualty_severity_total_year_wise$fatality
+serious_injury<-casualty_severity_total_year_wise$serious_injury
+slight_injry<-casualty_severity_total_year_wise$slight_injury
+
+
+#plotting accident severity category-wise for the last five years
+
+ggplot()+
+  geom_line(data=casualty_severity_total_year_wise,aes(y=fatality,x= accident_year,colour="Fatalities"),size=1 )+
+  geom_line(data=casualty_severity_total_year_wise,aes(y=serious_injury,x= accident_year,colour="Serious Injuries"),size=1) +
+  geom_line(data=casualty_severity_total_year_wise,aes(y=slight_injry,x= accident_year,colour="Slight Injuries"),size=1) +
+  scale_color_manual(name = "Categories of Accident Severity", values = c("Fatalities" = "red", "Serious Injuries" = "black","Slight Injuries" = "purple"))+labs(title="
+            Accident Severity Types in UK 2016-2020",
+x ="Year", y = "Number of Injuries")+ theme(
+  panel.background = element_rect(fill = "lightblue",
+                                colour = "lightblue",
+                                size = 0.5, linetype = "solid"),
+  panel.grid.major = element_line(size = 0.5, linetype = 'solid',
+                                colour = "white"),
+  panel.grid.minor = element_line(size = 0.25, linetype = 'solid',
+                                colour = "white"))
+```
+
+
+```{r warning=FALSE, message=FALSE}
+
+#Extracting stats19 data with description for casualty year-wise
+
+casualty_year_2016 = get_stats19(year = 2016, type = "casualty")
+casualty_year_2017 = get_stats19(year = 2017, type = "casualty")
+casualty_year_2018 = get_stats19(year = 2018, type = "casualty")
+casualty_year_2019 = get_stats19(year = 2019, type = "casualty")
+casualty_year_2020 = get_stats19(year = 2020, type = "casualty")
+
+cas_joined_all<-full_join(casualty_year_2016, casualty_year_2017)
+cas_joined_all<-full_join(cas_joined_all, casualty_year_2018)
+cas_joined_all<-full_join(cas_joined_all, casualty_year_2019)
+cas_joined_all<-full_join(cas_joined_all, casualty_year_2020)
+
+#Extracting stats19 data with description for accident year-wise
+
+accident_year_16 = get_stats19(year = 2016, type = "accident")
+accident_year_17 = get_stats19(year = 2017, type = "accident")
+accident_year_18 = get_stats19(year = 2018, type = "accident")
+accident_year_19 = get_stats19(year = 2019, type = "accident")
+accident_year_20 = get_stats19(year = 2020, type = "accident")
+accident_year_17$longitude<-as.numeric(accident_year_17$longitude)
+accident_year_17$latitude<-as.numeric(accident_year_17$latitude)
+total_accident_joined<-full_join(accident_year_16, accident_year_17)
+
+total_accident_joined<-full_join(total_accident_joined, accident_year_18)
+total_accident_joined<-full_join(total_accident_joined, accident_year_19)
+total_accident_joined<-full_join(total_accident_joined, accident_year_20)
+total_accident_joined<-na.omit(total_accident_joined)
+ 
+```
+
+## Accident Severity in different Districts
+```{r}
+
+# Finding the frequency of each local authority districts for word cloud
+
+total<-total_accident_joined %>%count(local_authority_district, sort = TRUE, name = "freq")
+
+# Finding the local authority districts with high accident severity
+
+total_accident_joined %>%
+  count(local_authority_district, sort = TRUE, name = "freq") %>%
+  filter(freq > 10) %>%
+  wordcloud2()
+```
+
+
+## Geospatial mapping on Brent(sample): Based on Accident Severity
+```{r warning=FALSE, message=FALSE}
+
+#Mapping the casualty severity data on static google map
+
+accident_data<-na.omit(accident_data)
+casualty_class_driver_rider<-subset(accident_data,local_authority_district == 28)
+casualty_class_driver_rider_fatal <- subset(casualty_class_driver_rider,accident_severity == 2)
+longitude <- c(casualty_class_driver_rider$longitude)
+latitude <- c(casualty_class_driver_rider$latitude)
+center = c(mean(latitude),mean(longitude))
+col=as.numeric(casualty_class_driver_rider$accident_severity)
+zoom <-12
+terrmap <- GetMap(center = center, zoom = zoom,maptype= "mapmaker-hybrid", 
+                   destfile = tempfile("mapmaker-hybrid", fileext = ".png"),markers=markers,verbose=0)
+
+PlotOnStaticMap(terrmap,lat=latitude,lon=longitude,col=c('red','black','purple'),pch=15)
+unique_col <- unique(col)
+unique_col_fatal <- replace(unique_col,1,"Fatal")
+unique_col_serious <- replace(unique_col_fatal,2,"Serious")
+unique_col_slight <- replace(unique_col_serious,3,"Slight")
+
+legend("topleft", legend = unique_col_slight, fill = c('red','black','purple'),
+bg = rgb(0.1,0.1,0.1,0.3))
+```
+
+
+
+
+```{r, warning=FALSE, message=FALSE}
+
+# Removing the null values from the accident and casualty data after joining
+
+total_casualty_accident_data<-full_join(accident_data, casualty_data)
+
+total_casualty_accident_data<-na.omit(total_casualty_accident_data)
+```
+
+## Accident Severity based on Age-band
+```{r}
+
+# Mosaic plot of accident severity on the basis of age band
+
+mosaicplot(age_band_of_casualty~accident_severity,data=total_casualty_accident_data,col=c("red","black","purple"),xlab="Age Band",ylab="Accident Severity",main = "Accident Severity: Based on Age Band")
+
+```
+----- 1 : 0-5 age, 2 : 6-10 age, 3 : 11-15 age, 4 : 16-20 age, 5 : 21-25 age, 6 : 26-35 age, 7 : 36-45 age, 8 : 46-54 age, 9 : 55-64 age, 10 : 65-74, 11 : 75 plus age
+
+
+
+```{r}
+
+# Referred from : https://stackoverflow.com/questions/56304698/how-do-i-plot-the-variable-importance-of-my-trained-rpart-decision-tree-model
+
+# Feature extractions of accident severity using Random Forest Algorithm
+
+accident_data<-subset(accident_data, select = -c(1,3:5) )
+
+model_rf <-ranger(
+  accident_severity ~.,
+  data = accident_data,
+  importance = "impurity",
+  num.trees = 500)
+
+variable_importance_data <- data.frame(imp = model_rf$variable.importance)
+```
+
+## Listing the importance variables of Accident Severity (Random Forest)
+```{r}
+
+# Plotting the importance variables for accident severity
+
+listing_variable_importance_data <- variable_importance_data %>%
+  tibble::rownames_to_column() %>%
+  dplyr::rename("variable" = rowname) %>%
+  dplyr::arrange(imp) %>%
+  dplyr::mutate(variable = forcats::fct_inorder(variable))
+ggplot2::ggplot(listing_variable_importance_data) +
+  geom_col(aes(x = variable, y = imp),
+           col = "black", show.legend = F) +
+  coord_flip() +
+  scale_fill_grey() +
+  theme_bw()
+```
+
+```{r}
+
+# Referred from : https://stackoverflow.com/questions/56304698/how-do-i-plot-the-variable-importance-of-my-trained-rpart-decision-tree-model  
+
+# Feature extractions of casualty severity using Random Forest Algorithm
+
+casualty_data<-subset(casualty_data, select = -c(1,3:5) )
+
+model_rf <-ranger(
+  casualty_severity ~.,
+  data = casualty_data,
+  importance = "impurity",
+  num.trees = 500)
+
+imp_variable_data <- data.frame(imp = model_rf$variable.importance)
+```
+
+
+## Listing the importance variables of Casualty Severity (Random Forest)
+```{r}
+
+# Plotting the importance variables for casualty severity
+
+listing_imp_variable_data <- imp_variable_data %>%
+  tibble::rownames_to_column() %>%
+  dplyr::rename("variable" = rowname) %>%
+  dplyr::arrange(imp) %>%
+  dplyr::mutate(variable = forcats::fct_inorder(variable))
+ggplot2::ggplot(listing_imp_variable_data) +
+  geom_col(aes(x = variable, y = imp),
+           col = "black", show.legend = F) +
+  coord_flip() +
+  scale_fill_grey() +
+  theme_bw()
+```
+
+```{r}
+
+# Detailed view of casualty type on the basis of accident severity
+
+boxplot(casualty_severity~casualty_type,data=casualty_data,ylab= "casualty severity", xlab= "casualty_type", main= "casualty severity on the basis of casualty type")
+```
+
+
+```{r}
+
+# European Union data of accident deaths in the last decade
+
+eu_data <- read_excel("/home/nrs14/Nag/FDS_PROJECT/eudata.xls")
+
+```
+
+
+```{r}
+
+# finding the total number of accidents for each country in EU
+
+eu_data_melt<- reshape2::melt(eu_data, id = c("country"))
+colnames(eu_data_melt)[2] <-"year"
+colnames(eu_data_melt)[3] <-"no_of_accidents"
+eu_data_melt<- eu_data_melt %>% group_by(country) %>% summarise_at(vars(no_of_accidents),list(no_of_accidents=sum))
+eu_data_melt <- eu_data_melt[order(-eu_data_melt$no_of_accidents),]
+eu_data_melt <- eu_data_melt %>% slice(-c(1))
+
+```
+
+
+```{r}
+
+# selecting the EU countries with over 10000 deaths in the last decade
+
+eu_data_greater_thousand <- eu_data_melt %>% filter(no_of_accidents >= 10000)
+ 
+```
+
+
+## Comparing total Accident Deaths:UK Vs European Countries
+```{r}
+
+# Visualizing accident deaths for selected EU countries
+
+eu_data_greater_thousand$country[eu_data_greater_thousand$country == "Germany (until 1990 former territory of the FRG)"]<-"Germany"
+eu_data_greater_thousand$country[eu_data_greater_thousand$country == "United Kingdom"]<-"UK"
+
+eu_data_greater_thousand_chart<- ggplot(eu_data_greater_thousand, aes(x=country, y=no_of_accidents, fill=country))+
+geom_bar(width = 1, stat = "identity")
+eu_data_greater_thousand_chart
+
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+
+# European Union data on accident deaths for PIN (Performance Index: Road safety) countries
+
+data_europin_inhabitants <- read_excel("/home/nrs14/Nag/FDS_PROJECT/eu_pin_countries.xlsx", sheet=2)
+
+```
+
+
+
+```{r, warning=FALSE, message=FALSE}
+
+#Referred from: https://slcladal.github.io/maps.html
+
+# Selecting accident deaths per million inhabitants (in %) for EU PIN countries
+
+data_europin_inh_top_2010<-subset(data_europin_inhabitants,select = c(country,Deaths_per_mln_inhabitants_2010))
+data_europin_inh_top_2020<-subset(data_europin_inhabitants,select = c(country,Deaths_per_mln_inhabitants_2020))
+
+# Filtering accident deaths per million inhabitants (more than 60%) for EU PIN countries
+
+data_europin_inh_top_sel_2020<- data_europin_inh_top_2020 %>% filter(Deaths_per_mln_inhabitants_2020 > 60)
+data_europin_inh_top_sel_2010<- data_europin_inh_top_2010 %>% filter(Deaths_per_mln_inhabitants_2010 > 60)
+
+data_europin_inh_top_2010
+
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+
+# Matching country code with world map (2010)
+
+visitedMap <- joinCountryData2Map(data_europin_inh_top_sel_2010, 
+                                  joinCode = "ISO2",
+                                  nameJoinColumn = "country")
+```
+
+## EU Countries with more than 60% Accident Deaths per million inhabitants in 2010
+```{r, warning=FALSE, message=FALSE}
+
+#plotting the accident deaths on Europe map for 2010
+
+mapParams <- mapCountryData(visitedMap, 
+                            nameColumnToPlot="Deaths_per_mln_inhabitants_2010", 
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            mapRegion = "Europe",
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "Deaths per million inhabitants 2010",
+                            border = NA)
+
+do.call(addMapLegendBoxes, c(mapParams,
+                             x = 'right',bg = "transparent",bty="n"))
+```
+
+
+
+```{r, warning=FALSE, message=FALSE}
+
+# Matching country code with world map (2020)
+
+visitedMap <- joinCountryData2Map(data_europin_inh_top_sel_2020, 
+                                  joinCode = "ISO2",
+                                  nameJoinColumn = "country")
+```
+
+## EU Countries with more than 60% Accident Deaths per million inhabitants in 2020
+```{r, warning=FALSE, message=FALSE}
+
+#plotting the accident deaths on Europe map for 2020
+
+mapParams <- mapCountryData(visitedMap, 
+                            nameColumnToPlot="Deaths_per_mln_inhabitants_2020", 
+                            oceanCol = "azure2",
+                            catMethod = "categorical",
+                            missingCountryCol = gray(.8),
+                            mapRegion = "Europe",
+                            colourPalette = c("coral",
+                                              "coral2",
+                                              "coral3", "orangered", 
+                                              "orangered3", "orangered4"),
+                            addLegend = F,
+                            mapTitle = "Deaths per million inhabitants 2020",
+                            border = NA)
+# add legend and display map
+do.call(addMapLegendBoxes, c(mapParams,x = 'right',bg = "transparent",bty="n"))
+```
+
+
+
+```{r}
+citation("tidyverse")
+citation("dplyr")
+citation("latexpdf")
+citation("knitr")
+citation("readxl")
+citation("ggplot2")
+citation("janitor")
+citation("RgoogleMaps")
+citation("stats19")
+citation("wordcloud2")
+citation("rworldmap")
+citation("ranger")
+```
+
